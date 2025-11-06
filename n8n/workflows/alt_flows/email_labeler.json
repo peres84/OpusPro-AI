@@ -1,0 +1,1016 @@
+{
+  "name": "email_labeler",
+  "nodes": [
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "={\n    \"conversation_id\": \"\",\n\t\"title\": \"\",\n\t\"summary\": \"\",\n    \"label\": \"\",\n    \"product_found\":\"\",\n    \"product_ids\":\"\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        240
+      ],
+      "id": "efd69a9d-151b-4c95-9cbc-e392de5e9f24",
+      "name": "Output Parser"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        48,
+        256
+      ],
+      "id": "231b3721-1199-467a-a928-b62d4d8d429e",
+      "name": "2.0 flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ZjEVOiQjGdb70QFT",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1120,
+        -16
+      ],
+      "id": "301ba1e1-c0a3-43c0-86b0-b470cd19d9d0",
+      "name": "On receive trigger",
+      "retryOnFail": true,
+      "waitBetweenTries": 300,
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Label the email based on the details below:\ntitle: {{ $('On receive trigger').item.json.subject }}, text: {{ $('On receive trigger').item.json.text }}, conversation_id: {{ $('On receive trigger').item.json.threadId }}, possible attached document: {{ $json.output || 'No document analysis available' }}\n\n",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Objective:\nYou are an intelligent email assistant that automatically read incoming emails, understand their content and categorize them based on these custom labels: Urgent, Processing and Attention. Always add conversation id, title, summary and label in the output JSON.\nYou must check the available inventory to check for product availability and other information using coming soon and for that, you have two tools available: `get_products_ids(query)` and `check_inventory(product_id)`\n\nLabels explanation:\nNeeds-human (Red): For emails that requires human intervention as soon as possible because the email might be about a refund, complex questions/queries, direct contact with a representative of the company among others.\nAuto-processing (Green): For emails that an AI assistant can handle with minimal or no human intervention at all, like asking for product availability, business proposal, budget queries, order requests among others.\nFollow-up (Orange): For emails that may require human intervention or not, the middle ground between processing and urgent labels, like the user is asking for more information that may not be available on the database or be too nuanced, ask for future products or services that might not be available and therefore nowhere to be read from.\nNot related: For any email that does not fall within these categories, simply ignore it\n\nRules and constraints:\n- Keep it plain text, no markdown or markup\n- No swearing or indesencies \n- Do NOT include explanations or extra text outside the JSON.\n- Focus on clarity and correctness of classification.\n- For emails labeled `\"auto_process\"`, you may generate suggested actions or responses that the agent can send automatically, including checking product availability with `check_inventory` using the product IDs retrieved from `get_products_ids(query)`.\n\nTools:\n- Structure output parser\n- `get_products_ids(query)`: Returns a list of the most relevant product IDs from the inventory based on the user query using vector embeddings.\n- `check_inventory(product_id)`: Checks the availability of a specific product in the inventory by its inventory ID.\n\nTasks for label matching:\n1. Read the full email content, including subject and body. If the email does not seem to be related to the company, an inquiry, products etc. and instead is more related to spam emails, notifications from third parties (n8n, amazon etc.) simply ignore the tasks 2 to 5 and still return the output like specified in task 6 but in label put \"not_related\".\n2. Identify if the user is asking about a specific product.\n   - If a product is mentioned, first use the `get_products_ids(query)` tool to retrieve relevant product IDs.\n   - Then use `check_inventory` with the retrieved product IDs to determine availability.\n3. Decide the email label based on inventory:\n   - If any retrieved product has stock_quantity > 0, label the email as `\"auto_process\"`.\n   - If no products are found or all have stock_quantity <= 0, label it as `\"needs_human\"`.\n4. If no specific product is mentioned, classify based on content:\n   - `\"auto_process\"`: Can be handled entirely by the agent.\n   - `\"needs_human\"`: Requires human intervention.\n   - `\"follow_up\"`: Needs follow-up action but is not urgent.\n5. Summarize the email in 1-2 sentences (optional for `auto_process` emails to include in automated reply).\n6. Always return the output in **JSON format** with the following structure:\n{\n    \"conversation_id\": \"<id of the thread, otherwise null>\",\n\t\"title\": \"<title of the email, otherwise null>\",\n\t\"summary\": \"<summary of the email, otherwise null>\",\n    \"label\": \"<label of the email, otherwise null>\",\n\"product_found\": \"<name of the product if found, otherwise null>\",\n\"product_ids\": [\"<list of relevant product IDs if any>\"]\n}\n",
+          "maxIterations": 6
+        }
+      },
+      "id": "f28672dd-a2cb-4598-96d2-5ee95ad56e20",
+      "name": "AI labeler json",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        192,
+        0
+      ],
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "typeVersion": 1.7,
+      "alwaysOutputData": true,
+      "maxTries": 4,
+      "waitBetweenTries": 300,
+      "notes": "Objective:\nAutomatically categorize incoming emails based on these custom labels: Urgent, Processing and Attention\n\nLabels explanation:\nUrgent (Red): For emails that requires human intervention as soon as possible because the email might be about a refund, complex questions/queries, direct contact with a representative of the company among others.\nProcessing (Green): For emails that an AI assistant can handle with minimal or no human intervention at all, like asking for product availability, business proposal, budget queries, order requests among others.\nAttention (Orange): For emails that may require human intervention or not, the middle ground between processing and urgent labels.\n\nTools:\n- \n\nLabel Matching:\n\nAnalyze the email's subject, sender, recipient, keywords, and content.\nCompare with the aforementioned labels.\nAssign the email to the most appropriate existing label.\nMIGHT NEED CUSTOM TOOLS FOR JSON GENERATION\n"
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "returnAll": "="
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        -16
+      ],
+      "id": "ce880e09-c57c-4558-995a-0d0c49665d3a",
+      "name": "Get many labels",
+      "webhookId": "519e5b3c-1057-4b32-a3f8-ac811c50382d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// String to search for (from another node, e.g., 'json_structurer')\nconst searchString = $('json_structurer').first().json.label;\n\n// Map over the input items\nreturn items.map(item => {\n  const data = item.json; // n8n provides input JSON in item.json\n\n  // Check if the name contains the search string\n  return {\n    json: {\n      id: data.id,\n      name: data.name,\n      found: data.name && data.name.includes(searchString)\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        -16
+      ],
+      "id": "a18c13ff-86b6-4783-b550-0ba06ea5988f",
+      "name": "label_exist_check"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the raw input\nlet raw = items[0].json.output;\n\n// Check if it's already an object (desired structure)\nif (typeof raw === 'object') {\n    return [{ json: raw }];\n}\n\n// If it's a string, try to extract JSON part\ntry {\n    let jsonPartMatch = raw.match(/\\{[\\s\\S]*\\}/);\n    if (!jsonPartMatch) {\n        throw new Error(\"No JSON found in the string\");\n    }\n    let jsonPart = jsonPartMatch[0];\n\n    // Parse it into a proper JSON object\n    let parsed = JSON.parse(jsonPart);\n\n    return [{ json: parsed }];\n} catch (error) {\n    // If parsing fails, return the original input as-is\n    return [{ json: { error: \"Failed to parse JSON\", raw } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -80
+      ],
+      "id": "087ae675-241a-4192-9149-e432db4c2e88",
+      "name": "json_structurer",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 300,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "addLabels",
+        "threadId": "={{ $('json_structurer').item.json.conversation_id }}",
+        "labelIds": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        64
+      ],
+      "id": "7c5c3a88-6736-458e-8ef5-b300268d084c",
+      "name": "add new label",
+      "webhookId": "d0d9470a-9de8-4840-9932-731aee6de3ac",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 300,
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pick the first item (or any logic to select one)\nconst firstItem = items[0].json;\n\n// Return as a single object with your desired structure\nreturn [\n  {\n    json: {\n      create_label: $('json_structurer').first().json.label, // from another node\n      thread_id: $('json_structurer').first().json.conversation_id// new field\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        224
+      ],
+      "id": "1ecd14e1-4026-4e96-aacf-87cd44dcd07a",
+      "name": "simplifier",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "addLabels",
+        "threadId": "={{ $('json_structurer').item.json.conversation_id }}",
+        "labelIds": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1504,
+        -112
+      ],
+      "id": "072a3ffd-5040-4e11-994c-72f2b35ddfb5",
+      "name": "add old label",
+      "webhookId": "8be34f80-a4de-4df6-8fb9-df9f1247d4be",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 300,
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "operation": "create",
+        "name": "={{ $('json_structurer').item.json.label }}",
+        "options": {
+          "labelListVisibility": "labelShow"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1504,
+        64
+      ],
+      "id": "39264fc0-f70d-4604-bcdf-db331888ae29",
+      "name": "create label",
+      "webhookId": "65e8a45c-77c8-4a1f-a2c9-e9780d0d742d",
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "waitBetweenTries": 300,
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('On receive trigger').item.json.threadId }}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        176,
+        256
+      ],
+      "id": "cd1cee68-a34f-4ae4-840e-e98c7f00ba04",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0",
+          "mode": "list",
+          "cachedResultName": "inventory_dataset",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 788443557,
+          "mode": "list",
+          "cachedResultName": "inventory_data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit#gid=788443557"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "inv_id",
+              "lookupValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', `product_id`, 'string') }}"
+            }
+          ]
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        352
+      ],
+      "id": "82c4215b-8f64-47c0-94a5-b2d5478a2944",
+      "name": "check_inventory",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "03815ffc-4a4f-47fa-a847-6a664167565d",
+              "leftValue": "={{ $json.attachmentPresence }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        -16
+      ],
+      "id": "8796ae20-9341-4849-b0da-905eef83ac85",
+      "name": "if_pdf_exists"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c6febe85-511f-4943-8d3e-356e737a4841",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1296,
+        -16
+      ],
+      "id": "efacd334-6bac-42be-9725-bcabb8c31d89",
+      "name": "if_label_exists"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.data }}",
+        "options": {
+          "systemMessage": "You are an intelligent document analyzer that extracts and summarizes key information from parsed PDF documents.\n\nYour task is to analyze the provided JSON data from a parsed PDF and create a clear, structured summary.\n\n## Input Format\nYou will receive JSON data containing:\n- `markdown`: Full text content with structural elements\n- `extracted_schema`: Key fields extracted based on defined schema\n- `chunks`: Individual text segments with their locations\n- `metadata`: Document processing information\n\n## Output Requirements\nProvide a well-structured summary that includes:\n\n1. **Document Type**: Identify what kind of document this is (e.g., invoice, purchase order, inquiry, contract)\n\n2. **Key Information**: Extract and present the most important details such as:\n   - Reference numbers, dates, amounts\n   - Sender and recipient information\n   - Main purpose or subject\n\n3. **Critical Details**: Highlight time-sensitive or action-required information:\n   - Deadlines, delivery dates\n   - Required actions or responses\n   - Contact information\n\n4. **Items/Products** (if applicable): Summarize any products, services, or line items with:\n   - Quantities\n   - Specifications\n   - Total counts or amounts\n\n5. **Special Requirements**: Note any certifications, standards, or specific conditions mentioned\n\n## Formatting Guidelines\n- Use clear headers and bullet points for readability\n- Highlight urgent dates or requirements with ⏰ emoji\n- Keep the summary concise but comprehensive\n- Use tables only when presenting multiple similar items\n- Bold important values like amounts, dates, and reference numbers\n\n## Tone\n- Professional and objective\n- Clear and actionable\n- Focused on what matters most to the recipient\n\nNow, analyze the provided parsed PDF data and create a summary following these guidelines."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -144,
+        -272
+      ],
+      "id": "de4d5aea-84ab-4f07-b6a2-b134d1ef7edc",
+      "name": "AI pdf_handler"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -112
+      ],
+      "id": "abb2aeb0-14b3-4f22-92fd-b24b90872e3c",
+      "name": "2.0 -flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        -240
+      ],
+      "id": "87b3e906-14b0-45f8-b8f6-f08072f945ee",
+      "name": "save_summarie",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.summary, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $('On receive trigger').item.json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        -240
+      ],
+      "id": "3fac083a-9599-4f5d-9b8a-5fce7fbebc58",
+      "name": "set_assitant_message",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' + $json.threadId }}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        -16
+      ],
+      "id": "0e1a9bbd-c0cc-415e-8df2-c20efcc81ba4",
+      "name": "save_user_message",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "= {{ JSON.stringify({\n    role: 'user',\n    content: $json.text,\n    timestamp: $now.toISO(),\n    attachment: Object.keys($binary ?? {}).includes('attachment_0')\n  }) }}",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.threadId }}",
+              "type": "string"
+            },
+            {
+              "id": "70240e04-3e17-4f9c-a475-fe20423d0631",
+              "name": "attachmentPresence",
+              "value": "={{Object.keys($binary ?? {}).includes('attachment_0')}}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -928,
+        -16
+      ],
+      "id": "98e29854-bbf5-44d5-b59a-72dd0e784a61",
+      "name": "format_user_message",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.va.landing.ai/v1/tools/agentic-document-analysis",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer bDEyNnUyOGIxdjlkZGF3NGtsMmloOmhNdUtRd09sbkN0dk5TS3lnRFQxbksyM2dvcEZIMjVB"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "include_marginalia",
+              "value": "true"
+            },
+            {
+              "name": "include_metadata_in_markdown",
+              "value": "true"
+            },
+            {
+              "name": "enable_rotation_detection",
+              "value": "false"
+            },
+            {
+              "name": "fields_schema",
+              "value": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"field1\": {\"type\": \"string\"},\n    \"field2\": {\"type\": \"string\"}\n  },\n  \"required\": [\"field1\", \"field2\"]\n}\n"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "pdf",
+              "inputDataFieldName": "attachment_0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -320,
+        -272
+      ],
+      "id": "abe814d5-370b-4cc4-8af2-e4116b4f6db2",
+      "name": "HTTP Request pdf"
+    },
+    {
+      "parameters": {
+        "url": "https://hackathon25k.app.n8n.cloud/webhook/030cadf5-25de-4ae5-aaf8-12843a021463",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "ticket_id",
+              "value": "={{ $('On receive trigger').item.json.threadId }}"
+            },
+            {
+              "name": "status",
+              "value": "new"
+            },
+            {
+              "name": "time",
+              "value": "={{$now.toISO()}}"
+            },
+            {
+              "name": "alert",
+              "value": "={{ $('json_structurer').item.json.label }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1312,
+        -240
+      ],
+      "id": "d907db40-8241-461d-9c70-6b0cb02e1891",
+      "name": "HTTP Request webhook",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fbc08a57-4455-47c0-9014-218ed620511b",
+              "leftValue": "={{ $json.output.label }}",
+              "rightValue": "not_related",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        528,
+        0
+      ],
+      "id": "c90f7fd6-b9a4-4ef3-bea1-20ff278f5af3",
+      "name": "If company related"
+    },
+    {
+      "parameters": {
+        "errorMessage": "Email unrelated to business"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        752,
+        96
+      ],
+      "id": "0e5aaa52-5e40-41b4-9072-b61c3c98c00b",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to get the product_id list that matches the query",
+        "method": "POST",
+        "url": "https://ab8b5c386c36.ngrok-free.app/webhook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        352
+      ],
+      "id": "b422364f-379a-4d0b-93fe-fde9020869cf",
+      "name": "get_products_ids"
+    },
+    {
+      "parameters": {
+        "content": "## In a perfecrt world\nOn receive trigger would partition by connecting to \"if_pdf_exists\" and \"format_user_message\" in parallel instead of sequence"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1152,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "8561a724-cf96-4fb8-8f7f-87b07d097ccc",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## In a perfecrt world\n\"json_structurer\" would partition by connecting to \"set_assitant_message\" and \"Get many labels\" in parallel instead of sequence"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        656,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "bcca9024-3e7e-49de-b43b-4ac2722cead7",
+      "name": "Sticky Note1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI labeler json",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.0 flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI labeler json",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On receive trigger": {
+      "main": [
+        [
+          {
+            "node": "format_user_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI labeler json": {
+      "main": [
+        [
+          {
+            "node": "If company related",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many labels": {
+      "main": [
+        [
+          {
+            "node": "label_exist_check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "label_exist_check": {
+      "main": [
+        [
+          {
+            "node": "if_label_exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "json_structurer": {
+      "main": [
+        [
+          {
+            "node": "set_assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "add new label": {
+      "main": [
+        []
+      ]
+    },
+    "simplifier": {
+      "main": [
+        []
+      ]
+    },
+    "create label": {
+      "main": [
+        [
+          {
+            "node": "add new label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI labeler json",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_inventory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI labeler json",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "add old label": {
+      "main": [
+        []
+      ]
+    },
+    "if_pdf_exists": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request pdf",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI labeler json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if_label_exists": {
+      "main": [
+        [
+          {
+            "node": "add old label",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "create label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI pdf_handler": {
+      "main": [
+        [
+          {
+            "node": "AI labeler json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.0 -flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI pdf_handler",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_assitant_message": {
+      "main": [
+        [
+          {
+            "node": "save_summarie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format_user_message": {
+      "main": [
+        [
+          {
+            "node": "save_user_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_user_message": {
+      "main": [
+        [
+          {
+            "node": "if_pdf_exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_summarie": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request pdf": {
+      "main": [
+        [
+          {
+            "node": "AI pdf_handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request webhook": {
+      "main": [
+        [
+          {
+            "node": "Get many labels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If company related": {
+      "main": [
+        [
+          {
+            "node": "json_structurer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_products_ids": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI labeler json",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "939e4dce-1366-4492-acb1-a3da84266e97",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "IIZa7i6W3NuUCWKO",
+  "tags": []
+}

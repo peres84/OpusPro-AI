@@ -1,0 +1,390 @@
+{
+  "name": "manager_chat_helper",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        304
+      ],
+      "id": "cb982395-0197-4fb1-97d1-ed15a83f66df",
+      "name": "manager_respond",
+      "retryOnFail": true,
+      "executeOnce": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "conv",
+        "key": "={{ 'conversation:' + $json.threadId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redisTool",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        512
+      ],
+      "id": "9a12e03e-1e9a-47b0-aee8-91b8df28f722",
+      "name": "get_conversation",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.threadId }}",
+        "contextWindowLength": 8
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1360,
+        512
+      ],
+      "id": "a3a7c251-04a5-4705-9f8d-c0f25786f610",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "= {{ JSON.stringify({\n    role: 'manager',\n    content: $json.body.message,\n    timestamp: $now.toISO()\n  }) }}",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.body.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        304
+      ],
+      "id": "6a587021-3e44-48a5-9fdc-f51afc50e3ec",
+      "name": "format_manager_message",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 200,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        512
+      ],
+      "id": "544f400c-3a64-4cab-a570-033ca1d854e7",
+      "name": "2.0-flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "=You are an intelligent autonomous business assistant that helps a manager handle daily operations efficiently and professionally.\n\n### Available Tools\n- get_conversation → retrieves the last 5–8 messages from the conversation thread.\n- deal_with_providers → for supplier or logistics tasks (e.g. contacting providers, checking stock, negotiating prices, or resolving shipping/inventory issues).\n- respond_to_customer → for creating or sending customer responses, follow-ups, or support messages.\n- generate_invoice → for preparing or managing invoices, payments, or billing requests.\n\n### Objective\n1. Retrieve the last 5–8 messages using `get_conversation`.\n2. Understand what the manager is asking or needs to be done.\n3. Select and use the correct tool to execute the task.\n4. Once the action is completed, summarize what was done and respond back to the manager with a clear, natural message that includes results, progress, or next steps.\n\n### Behavior Guidelines\n- If the conversation mentions *provider*, *supplier*, *logistics*, *order delay*, or *inventory*, use `deal_with_providers`.\n- If it mentions *customer*, *email*, *reply*, *support*, or *follow-up*, use `respond_to_customer`.\n- If it mentions *invoice*, *payment*, *bill*, or *receipt*, use `generate_invoice`.\n- If multiple tools might be relevant, handle them sequentially and summarize the results.\n- If the intent is unclear, politely ask the manager for clarification instead of guessing.\n\n### Output Format\nWhen using tools internally, return their outputs silently (no direct text to the manager).  \nAfter all necessary actions are complete, generate a short, professional message back to the manager in this format:\n\n{\n  \"message_to_manager\": \"<clear summary of what you did and next step suggestion>\"\n}\n\n### Example\nIf the manager said:\n> \"Please check which providers have the product and confirm if we can order.\"\n\nYou might return:\n{\n  \"message_to_manager\": \"I contacted the providers. Only Provider X has the stock available at 410€. Do you want me to proceed with the purchase?\"\n}\n\nBe autonomous, concise, and professional. Always act with initiative and confirm next steps when needed."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1296,
+        304
+      ],
+      "id": "e3c13e72-09d2-4cc9-924a-013925cc4dbe",
+      "name": "AI assistant",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the response data\nconst response = $input.all();\n\n// Extract the output string from the first item\nconst outputString = response[0].json.output;\n\n// Remove the markdown code block markers (```json and ```)\nconst jsonString = outputString.replace(/```json\\n/g, '').replace(/\\n```/g, '');\n\n// Parse the JSON string\nconst parsedData = JSON.parse(jsonString);\n\n// Return the parsed data\nreturn [{ json: parsedData }];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        304
+      ],
+      "id": "ce77d538-0c5c-4a09-8f3a-cd2d346a064b",
+      "name": "json_formatter",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.summary, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $('manager_respond').item.json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1808,
+        112
+      ],
+      "id": "23640b87-4c76-46c2-ae07-3d0909d6af13",
+      "name": "set_assitant_message",
+      "retryOnFail": true,
+      "executeOnce": true,
+      "maxTries": 3,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1984,
+        112
+      ],
+      "id": "dfb8849c-dd8e-43d9-a843-1c6b6a1e07fa",
+      "name": "save_message",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "executeOnce": true,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('json_formatter').item.json.message_to_manager }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2192,
+        304
+      ],
+      "id": "8b1fe998-5caf-491e-bc1c-278f6bd4035e",
+      "name": "Webhook responder",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "path": "25701674-5af9-4e02-9f38-49180e631407",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        704,
+        304
+      ],
+      "id": "c340949a-b3d7-4e34-8ac6-a93c8f718293",
+      "name": "Webhook",
+      "webhookId": "25701674-5af9-4e02-9f38-49180e631407",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "manager_respond": {
+      "main": [
+        [
+          {
+            "node": "AI assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_conversation": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI assistant",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI assistant",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format_manager_message": {
+      "main": [
+        [
+          {
+            "node": "manager_respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.0-flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI assistant",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI assistant": {
+      "main": [
+        [
+          {
+            "node": "json_formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "json_formatter": {
+      "main": [
+        [
+          {
+            "node": "set_assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_assitant_message": {
+      "main": [
+        [
+          {
+            "node": "save_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_message": {
+      "main": [
+        [
+          {
+            "node": "Webhook responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0363ea81-f596-4008-9cd5-b2c16c7b4acf",
+  "meta": {
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "YLD5GdDiOHwAHxtn",
+  "tags": []
+}

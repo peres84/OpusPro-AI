@@ -1,0 +1,536 @@
+{
+  "name": "negotiator_supplier",
+  "nodes": [
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.conversation_id }}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        272,
+        208
+      ],
+      "id": "718ebc14-7396-45d3-9004-cbc539f27448",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"title\": \"<generate a main title>\", \n  \"original_text\":\"\",\n  \"summary\": \"<generate a summary of everything>\",\n  \"detailed_description\": \"<make a more detailed explanation of everything>\",\n  \"conversation_id\": \"\",\n  \"offers\":[\n    {\n\t\"offer_id\": \"<total cost of offer, otherwise null>\",\n\t  \"total_cost\": \"<total cost of offer, otherwise null>\",\n\t\"offer_details\": \"<detailed explanation of offer, otherwise null>\",\n\t\"product_found\": \"<name of the product/s if found, otherwise null>\",\n\t\"product_ids\": [\"<list of relevant product/s IDs if any>\"],\n\"currency\": \"<currency of transaction, otherwise null>\"\n    }\n]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        752,
+        208
+      ],
+      "id": "29c7320b-71b2-484a-8790-9bbb9040baa3",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Make the offer based on the details below: text: {{ $('Webhook').item.json.body.text }}, conversation_id:{{ $json.threadId }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=Objective:\nYou are an intelligent negotiator for the company, automatically analyze the given offer by a supplier and provide the best counter-offer based on the available data in the dabatases.\nFirst look into the inventory database to check for availability and prices of products and other information using the tools `get_products_ids(query)` and `check_inventory(product_id)`. Afterwards, look into the supplier database using the tool `extract_suppliers`.  in order to consider the suppliers already available focusing on delivery method, cost and supplier to make a counter offer\nWhen making an offer be sure to add a title, a summary, more detailed description and total cost (accomodated to the currency provided by the supplier).\n\nRules and constraints:\n- Keep it plain text, no markdown or markup\n- No swearing or indesencies \n- Do NOT include explanations or extra text outside the JSON.\n- Focus on clarity and correctness of classification.\n\nTools:\n- Structure output parser\n- `get_products_ids(query)`: Returns a list of the most relevant product IDs from the inventory based on the user query using vector embeddings.\n- `check_inventory(product_id)`: Checks the availability of a specific product in the inventory by its inventory ID.\n- `extract_suppliers`: Extracts the available suppliers in the database \n\nTasks and steps:\n1. Read the full content, looking especially for concrete products, quantities and details.\n2. Identify if the user is asking about a specific product.\n   - If a product is mentioned, first use the `get_products_ids(query)` tool to retrieve relevant product IDs.\n   - Then use `check_inventory` with the retrieved product IDs to determine availability.\n3. Start formulating offers based on inventory if applicable:\n   - If any retrieved product has stock_quantity > 0, include it in one of the offers\n   - If no products are found or all have stock_quantity <= 0, do not consider them in the offer and instead explain there is no availability.\n4. Enhance offers based on the available information of suppliers if applicable:\n   - Read the retrieved suppliers and analyze if there are alternatives or inmediate solutions for lack of availability among others.\n5. If no specific product is mentioned, classify based on content:\n   - analyze and determine the most likely product desired and process it\n6. Always return the output in **JSON format** with the following structure:\n{\n  \"title\": \"<generate a main title>\", \n  \"original_text\":\"\",\n  \"summary\": \"<generate a summary of everything>\",\n  \"detailed_description\": \"<make a more detailed explanation of everything>\",\n  \"conversation_id\": \"\",\n  \"offers\":[\n    {\n\t\"offer_id\": \"<total cost of offer, otherwise null>\",\n\t  \"total_cost\": \"<total cost of offer, otherwise null>\",\n\t\"offer_details\": \"<detailed explanation of offer, otherwise null>\",\n\t\"product_found\": \"<name of the product/s if found, otherwise null>\",\n\t\"product_ids\": [\"<list of relevant product/s IDs if any>\"],\n\"currency\": \"<currency of transaction, otherwise null>\"\n    }\n]\n}\n"
+        }
+      },
+      "id": "759e2b00-2ee3-4e74-b308-85e04c59e0e9",
+      "name": "AI negotiator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        384,
+        0
+      ],
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "typeVersion": 1.7,
+      "alwaysOutputData": true,
+      "maxTries": 4,
+      "waitBetweenTries": 300,
+      "notes": "Objective:\nAutomatically categorize incoming emails based on these custom labels: Urgent, Processing and Attention\n\nLabels explanation:\nUrgent (Red): For emails that requires human intervention as soon as possible because the email might be about a refund, complex questions/queries, direct contact with a representative of the company among others.\nProcessing (Green): For emails that an AI assistant can handle with minimal or no human intervention at all, like asking for product availability, business proposal, budget queries, order requests among others.\nAttention (Orange): For emails that may require human intervention or not, the middle ground between processing and urgent labels.\n\nTools:\n- \n\nLabel Matching:\n\nAnalyze the email's subject, sender, recipient, keywords, and content.\nCompare with the aforementioned labels.\nAssign the email to the most appropriate existing label.\nMIGHT NEED CUSTOM TOOLS FOR JSON GENERATION\n"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the first item\nlet item = items[0].json.output;\n\n// If \"output\" is a stringified JSON, parse it\nif (typeof item === 'string') {\n  try {\n    item = JSON.parse(item);\n  } catch (error) {\n    throw new Error('Failed to parse JSON from string: ' + error.message);\n  }\n}\n\n// Only clean if detailed_description exists\nif (item.detailed_description) {\n  item.detailed_description = item.detailed_description\n    .replace(/\\*\\*/g, '')           // remove bold markers **\n    .replace(/\\*/g, '')             // remove bullet markers *\n    .replace(/#+\\s?/g, '')          // remove any markdown headers #\n    .replace(/\\n{2,}/g, '\\n')       // normalize multiple newlines\n    .replace(/\\n\\s+/g, '\\n')        // trim spaces after newlines\n    .trim();                        // remove leading/trailing spaces\n}\n\n// Return cleaned object\nreturn [{ json: item }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "761446e7-5e19-47b2-87f0-d72bb707dd4a",
+      "name": "json_cleanser"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        160,
+        208
+      ],
+      "id": "e56d5ccd-38b7-421c-b4af-cbfa064bfa07",
+      "name": "2.0-flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the first (and only) item from the input\nlet item = items[0].json;\n\n// Add new fields\nitem.conversation_id = $input.first().json.conversation_id; //TODO: REPLACE WITH ACTUAL CONVO ID\nitem.original_text = $input.first().json.original_text;\n\n// Return updated JSON\nreturn [{ json: item }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "6837c422-a905-407b-a21d-5ec33dc9e341",
+      "name": "id_text_aggregator"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0",
+          "mode": "list",
+          "cachedResultName": "inventory_dataset",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 788443557,
+          "mode": "list",
+          "cachedResultName": "inventory_data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit#gid=788443557"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "inv_id",
+              "lookupValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', `product_id`, 'string') }}"
+            }
+          ]
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        512,
+        336
+      ],
+      "id": "00ec0692-c526-4573-b558-27fabd9dbb89",
+      "name": "check_inventory",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1LcGvkGQjYx0z2dpjiRIyZQuB-kUYtQXvpofYZpC1cIk/edit?usp=drivesdk",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1LcGvkGQjYx0z2dpjiRIyZQuB-kUYtQXvpofYZpC1cIk/edit#gid=483886516",
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        656,
+        336
+      ],
+      "id": "42eb9e33-ed74-44bf-a259-92d305f4958e",
+      "name": "extract_suppliers",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        144,
+        0
+      ],
+      "id": "1d6f721c-2c94-40cf-9347-86d1e196b3bf",
+      "name": "manager_respond",
+      "retryOnFail": true,
+      "executeOnce": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "=[\n  {\n    \"id\": \"567b1aea-5f01-46fd-bb7d-4843c955798f\",\n    \"name\": \"message\",\n    \"value\": {{ $json.body.text }},\n    \"type\": \"string\"\n  },\n  {\n    \"id\": \"7322972d-76b6-409c-9f57-868f318827da\",\n    \"name\": \"threadId\",\n    \"value\": \"={{ $json.body.conversation_id }}\",\n    \"type\": \"string\"\n  }\n]\n",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.body.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -64,
+        0
+      ],
+      "id": "6fa658ad-bdb9-4e41-bbe1-f664c9f1f6e6",
+      "name": "format_manager_message",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 200,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        0
+      ],
+      "id": "f0503eb9-f180-4785-aa2e-66fb0ef724a9",
+      "name": "save_summarie",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.detailed_description, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $json.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        0
+      ],
+      "id": "54990772-5b16-4c2a-a201-f4372c8cf541",
+      "name": "set_assitant_message",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to get the product_id list that matches the query",
+        "method": "POST",
+        "url": "https://ab8b5c386c36.ngrok-free.app/webhook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        368,
+        336
+      ],
+      "id": "e7950109-93ef-468d-bbbd-19765b29b438",
+      "name": "get_products_ids"
+    },
+    {
+      "parameters": {
+        "content": "## In a perfecrt world\nThe Webhook would partition by connecting to \"format_manager_message\" and the AI agent in parallel instead of sequence"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -208,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "2ad8199f-8f3e-46e5-90ac-6e8461ec70f7",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET",
+          "POST",
+          "PATCH"
+        ],
+        "path": "f00aeb12-dc7b-425d-88b5-09f873b83025",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -288,
+        -16
+      ],
+      "id": "e24a71b0-005d-4df0-bb0b-5d8140811c7a",
+      "name": "Webhook",
+      "webhookId": "f00aeb12-dc7b-425d-88b5-09f873b83025",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI negotiator": {
+      "main": [
+        [
+          {
+            "node": "json_cleanser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.0-flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "json_cleanser": {
+      "main": [
+        [
+          {
+            "node": "id_text_aggregator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_inventory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_suppliers": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "id_text_aggregator": {
+      "main": [
+        [
+          {
+            "node": "set_assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format_manager_message": {
+      "main": [
+        [
+          {
+            "node": "manager_respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manager_respond": {
+      "main": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_assitant_message": {
+      "main": [
+        [
+          {
+            "node": "save_summarie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_products_ids": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ba638b29-f6ae-4832-8024-55b53a85069b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "YrP4lDw4EvIo5Vr8",
+  "tags": []
+}

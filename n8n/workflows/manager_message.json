@@ -1,0 +1,372 @@
+{
+  "name": "manager_message",
+  "nodes": [
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "fb936f07-b536-409f-a281-7f339f606bd6",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "58f32754-8271-4e28-8585-dc4ee4e96508",
+      "name": "Webhook",
+      "webhookId": "fb936f07-b536-409f-a281-7f339f606bd6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "= {{ JSON.stringify({\n    role: 'manager',\n    content: $json.body.message,\n    timestamp: $now.toISO()\n  }) }}",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.body.ticket_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        0
+      ],
+      "id": "6c906a59-fe92-486c-b25e-02f71f8a341a",
+      "name": "FormatManagerMessage"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "88132a8f-9c77-4186-951c-ab51e3355d09",
+      "name": "manager_respond",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "=You are an autonomous business assistant that helps a manager handle daily operations efficiently and professionally.\n\n### Available Tools\n- get_conversation → retrieves the last 5–8 messages from the conversation thread.\n- deal_with_providers → for supplier or logistics tasks (e.g. contacting providers, checking stock, negotiating prices, or resolving shipping/inventory issues).\n- respond_to_customer → for creating or sending customer responses, follow-ups, or support messages.\n- generate_invoice → for preparing or managing invoices, payments, or billing requests.\n\n### Objective\n1. Retrieve the last 5–8 messages using `get_conversation`.\n2. Understand what the manager is asking or needs to be done.\n3. Select and use the correct tool to execute the task.\n4. Once the action is completed, summarize what was done and respond back to the manager with a clear, natural message that includes results, progress, or next steps.\n\n### Behavior Guidelines\n- If the conversation mentions *provider*, *supplier*, *logistics*, *order delay*, or *inventory*, use `deal_with_providers`.\n- If it mentions *customer*, *email*, *reply*, *support*, or *follow-up*, use `respond_to_customer`.\n- If it mentions *invoice*, *payment*, *bill*, or *receipt*, use `generate_invoice`.\n- If multiple tools might be relevant, handle them sequentially and summarize the results.\n- If the intent is unclear, politely ask the manager for clarification instead of guessing.\n\n### Output Format\nWhen using tools internally, return their outputs silently (no direct text to the manager).  \nAfter all necessary actions are complete, generate a short, professional message back to the manager in this format:\n\n{\n  \"message_to_manager\": \"<clear summary of what you did and next step suggestion>\"\n}\n\n### Example\nIf the manager said:\n> \"Please check which providers have the product and confirm if we can order.\"\n\nYou might return:\n{\n  \"message_to_manager\": \"I contacted the providers. Only Provider X has the stock available at 410€. Do you want me to proceed with the purchase?\"\n}\n\nBe autonomous, concise, and professional. Always act with initiative and confirm next steps when needed.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        0
+      ],
+      "id": "b6bcfdfb-6cfd-4961-bb6d-80a5adc6d6c1",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        768,
+        256
+      ],
+      "id": "1a01a2d9-a446-4eec-97dc-3f2168962c37",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "conv",
+        "key": "={{ 'conversation:' + $json.threadId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redisTool",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        272
+      ],
+      "id": "79742e8c-20ac-4609-9cc6-a7d8ec764611",
+      "name": "get_conversation",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the response data\nconst response = $input.all();\n\n// Extract the output string from the first item\nconst outputString = response[0].json.output;\n\n// Remove the markdown code block markers (```json and ```)\nconst jsonString = outputString.replace(/```json\\n/g, '').replace(/\\n```/g, '');\n\n// Parse the JSON string\nconst parsedData = JSON.parse(jsonString);\n\n// Return the parsed data\nreturn [{ json: parsedData }];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "ca092ab5-16e7-40ae-8c64-1e3c50ceff65",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1872,
+        0
+      ],
+      "id": "ca4a077f-ceb3-4ea5-856f-216f5cee2e72",
+      "name": "Redis",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.summary, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $('manager_respond').item.json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1584,
+        0
+      ],
+      "id": "15b6cee4-277d-42b1-8753-880f8c489488",
+      "name": "set_Assitant_message"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.threadId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        272
+      ],
+      "id": "8c2a1351-a8b5-4ab3-b778-dc22c88be41e",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('Code in JavaScript').item.json.message_to_manager }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2144,
+        0
+      ],
+      "id": "dd3906d4-13ae-4308-a5d4-2670688af74f",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "FormatManagerMessage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FormatManagerMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FormatManagerMessage": {
+      "main": [
+        [
+          {
+            "node": "manager_respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manager_respond": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_conversation": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "set_Assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_Assitant_message": {
+      "main": [
+        [
+          {
+            "node": "Redis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7b17270a-03b5-4ca1-a35c-d788e185c885",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "9MomDsGsNSY1BSpU",
+  "tags": []
+}

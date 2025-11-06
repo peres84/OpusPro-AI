@@ -1,0 +1,191 @@
+{
+  "name": "ticket_summarizer",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "conv",
+        "key": "={{ 'conversation:' + $json.body.ticket_id}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        -48
+      ],
+      "id": "fe4611be-70ea-4bd9-884c-676b5999fd85",
+      "name": "get_ticket_info",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "executeOnce": true,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=The Conversation is: {{ $json.conv }}",
+        "options": {
+          "systemMessage": "=Analyze the conversation history and write a single, natural text message that explains the situation to the manager and asks for their decision or action.\n\n## Input Format\n\nYou will receive a JSON object with a \"conv\" array containing stringified message objects. Each message has:\n\n- `role`: \"user\", \"ai_agent\", or \"manager\"\n- `content`: The message text\n- `timestamp`: When the message was sent\n\n## Output Format\n\nProvide ONLY a plain text message (no JSON, no formatting, just natural text).\n\n## Message Structure\n\nYour message should:\n\n1. Start with what the customer requested\n2. Explain the current situation/problem\n3. Mention any relevant details (stock levels, timing, previous follow-ups)\n4. End with a clear question asking what the manager should do\n\n## Tone\n\n- Direct and conversational\n- Focus on the key issue\n- Highlight urgency if customer is waiting or frustrated\n- End with a clear question for decision-making\n\n## Example Outputs\n\n**Example 1 (Stock shortage):**\n\n## Example Outputs\n\n**Example 1 (Stock shortage):**\nThe customer requested 30 units of Spur Gear Module 2, 40 Teeth, but we only have 15 units in stock. They've sent 4 follow-up messages over the past 3 hours asking for a response. Should we offer the 15 units we have now and check with the supplier for the remaining 15, or would you like to handle this differently?\n\n**Example 2 (Pricing approval):**\nThe customer is asking for a quote on Steel Rod DIN 2391 (150 pieces). The AI has provided standard pricing, but the customer is requesting a bulk discount. Should we approve a discount, and if so, what percentage would be appropriate?\n\n**Example 3 (Simple inquiry):**\nThe customer wants to know if we have Square Tube 40x40x3mm in stock. We have 50 pieces available (INV-008). Should the AI proceed with sending the availability confirmation and pricing?\n\n**Example 4 (Urgent follow-up):**\nThe customer has been waiting 5 hours for a response about their inquiry on construction materials. They've sent 3 follow-up emails and seem frustrated. The AI needs approval to proceed with the quote. Can you approve this so we can respond immediately?\n\n**Example 5 (Manager already responded but unclear):**\nThe customer requested Spur Gear Module 2 (30 units minimum), but we only have 15 in stock. You previously responded \"all good, thanks\" but the customer is still asking for an answer. Should we reach out to clarify if you meant to approve a partial shipment or if you'll source the additional units?\n\n## Guidelines\n\n### When customer is waiting:\n- Mention how long they've been waiting\n- Mention number of follow-ups\n- Use phrases like \"They've sent X follow-up messages\" or \"waiting for Y hours\"\n\n### When there's a stock issue:\n- State what was requested vs. what's available\n- Be specific with numbers\n- Ask about alternatives (partial shipment, supplier contact, alternatives)\n\n### When pricing/approval needed:\n- State what needs approval\n- Ask for specific decision (discount percentage, pricing, terms)\n\n### When situation is unclear:\n- Explain the confusion\n- Ask for clarification\n- Reference previous manager responses if they exist\n\n### Keep it under 100 words when possible\n- Be concise but complete\n- One clear question at the end\n- No bullet points, just flowing text\n\nNow analyze the provided conversation and generate the manager message.\nThis will produce simple, natural text messages like:\n\n\"The customer requested 30 units of Spur Gear Module 2, 40 Teeth, but we only have 15 in stock. They've sent 4 follow-ups over 3 hours. Should we offer partial shipment or contact the supplier for more?\""
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        144,
+        -48
+      ],
+      "id": "26098867-93d9-4dfc-98c0-cbcfc735e8ea",
+      "name": "AI Ticketer"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        144,
+        96
+      ],
+      "id": "5f556307-0758-4644-88b8-574b7bfda816",
+      "name": "2.0-flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        -48
+      ],
+      "id": "9501e8d0-3d70-4c68-b12a-e225415a5502",
+      "name": "Webhook responder"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET",
+          "POST",
+          "PATCH"
+        ],
+        "path": "aeaca919-20ba-411e-acf2-94b5d5efb025",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -304,
+        -64
+      ],
+      "id": "aa33d787-bbb6-4644-866a-960c9284fb8d",
+      "name": "Webhook1",
+      "webhookId": "aeaca919-20ba-411e-acf2-94b5d5efb025",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "get_ticket_info": {
+      "main": [
+        [
+          {
+            "node": "AI Ticketer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Ticketer": {
+      "main": [
+        [
+          {
+            "node": "Webhook responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.0-flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Ticketer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "get_ticket_info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "get_ticket_info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "get_ticket_info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "dd6d3a04-628b-4ebe-8204-e79e8b16eba8",
+  "meta": {
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "slf7ZOoTC8qa3Lfv",
+  "tags": []
+}

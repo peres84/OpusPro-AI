@@ -1,0 +1,564 @@
+{
+  "name": "negotiator_invoice",
+  "nodes": [
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"title\": \"<generate a main title>\", \n  \"original_text\":\"\",\n  \"summary\": \"<generate a summary of everything>\",\n  \"detailed_description\": \"<make a more detailed explanation of everything>\",\n  \"conversation_id\": \"\",\n  \"offers\":[\n    {\n\t\"offer_id\": \"<total cost of offer, otherwise null>\",\n\t  \"total_cost\": \"<total cost of offer, otherwise null>\",\n\t\"offer_details\": \"<detailed explanation of offer, otherwise null>\",\n\t\"product_found\": \"<name of the product/s if found, otherwise null>\",\n\t\"product_ids\": [\"<list of relevant product/s IDs if any>\"],\n\"currency\": \"<currency of transaction, otherwise null>\"\n    }\n]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        928,
+        288
+      ],
+      "id": "c6b1c02a-0bad-45f4-9e5e-ba67aa7bc291",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Make the offer based on the details below: text: {{ $('Webhook').item.json.body.text }}, conversation_id:{{ $json.threadId }}",
+        "options": {
+          "systemMessage": "=Objective:\nYou are an intelligent negotiator for the company, automatically analyze the given request by a client and provide the best counter-offer based on the available data in the dabatases.\nFirst look into the inventory database to check for availability of products and other information using the tools `get_products_ids(query)` and `check_inventory(product_id)`. Afterwards, look into the supplier database using the tool `extract_suppliers`.  in order to consider delivery method, cost and supplier to make an offer; make several alternative offers if there is other options.\nWhen making an offer be sure to add a title, a summary, more detailed description and total cost (accomodated to the currency provided by the client).\n\nRules and constraints:\n- Keep it plain text, no markdown or markup\n- No swearing or indesencies \n- Do NOT include explanations or extra text outside the JSON.\n- Focus on clarity and correctness of classification.\n\nTools:\n- Structure output parser\n- `get_products_ids(query)`: Returns a list of the most relevant product IDs from the inventory based on the user query using vector embeddings.\n- `check_inventory(product_id)`: Checks the availability of a specific product in the inventory by its inventory ID.\n- `extract_suppliers`: Extracts the available suppliers in the database \n- `generate_invoice_webhook`: You can call this function to generate a PDF invoice once the customer agrees to purchase.  \n  When the client confirms they want to buy, create the following payload:\n\n  ```json\n  payload = {\n    \"conversation\": \"<short natural language description of the order you can include as much information as possible to generate the invoice>\"\n  }\n\n## Extra information that you can use \n\n\"data\": {\n      \"receiver_name\": \"<customer name>\",\n      \"receiver_address1\": \"<address line 1>\",\n      \"receiver_address2\": \"<address line 2>\",\n      \"invoice_no\": \"<unique invoice number>\",\n      \"date\": \"<current date>\",\n      \"items\": [\n        {\n          \"item_name\": \"<product name>\",\n          \"unit_price\": <price>,\n          \"unit\": <quantity>,\n          \"total\": <subtotal>\n        }\n      ],\n      \"terms\": \"Payment due within 30 days\",\n      \"conditions\": \"Standard terms and conditions apply\"\n    }\n\nTasks and steps:\n1. Read the full content, looking especially for concrete products, quantities and details.\n2. Identify if the user is asking about a specific product.\n   - If a product is mentioned, first use the `get_products_ids(query)` tool to retrieve relevant product IDs.\n   - Then use `check_inventory` with the retrieved product IDs to determine availability.\n3. Start formulating offers based on inventory if applicable:\n   - If any retrieved product has stock_quantity > 0, include it in one of the offers\n   - If no products are found or all have stock_quantity <= 0, do not consider them in the offer and instead explain there is no availability.\n4. Enhance offers based on the available information of suppliers using the tool `extract_suppliers` if applicable:\n   - Read the retrieved suppliers and analyze if there are alternatives or inmediate solutions for lack of availability among others.\n   - For products that may not be in the inventory or not enough quantities, use `extract_suppliers` to analyze if there are any suppliers that might provide the missing requested products\n5. If no specific product is mentioned, classify based on content:\n   - analyze and determine the most likely product desired and process it\n6. Use the tool `generate_invoice_webhook` to generate and invoice and obtain the link of the newly generated invoice. \n7. Always return the output in **JSON format** with the following structure:\n{\n  \"title\": \"<generate a main title>\", \n  \"original_text\":\"\",\n  \"invoice_url\":\"\",\n  \"summary\": \"<generate a summary of everything>\",\n  \"detailed_description\": \"<make a more detailed explanation of everything>\",\n  \"conversation_id\": \"\",\n  \"offers\":[\n    {\n\t\"offer_id\": \"<total cost of offer, otherwise null>\",\n\t  \"total_cost\": \"<total cost of offer, otherwise null>\",\n\t\"offer_details\": \"<detailed explanation of offer, otherwise null>\",\n\t\"product_found\": \"<name of the product/s if found, otherwise null>\",\n\t\"product_ids\": [\"<list of relevant product/s IDs if any>\"],\n\"currency\": \"<currency of transaction, otherwise null>\"\n    }\n]\n}\n"
+        }
+      },
+      "id": "b8a490aa-abe2-4d6d-b0db-ebf7e124820d",
+      "name": "AI negotiator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        384,
+        0
+      ],
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "typeVersion": 1.7,
+      "alwaysOutputData": true,
+      "maxTries": 4,
+      "waitBetweenTries": 300,
+      "notes": "Objective:\nAutomatically categorize incoming emails based on these custom labels: Urgent, Processing and Attention\n\nLabels explanation:\nUrgent (Red): For emails that requires human intervention as soon as possible because the email might be about a refund, complex questions/queries, direct contact with a representative of the company among others.\nProcessing (Green): For emails that an AI assistant can handle with minimal or no human intervention at all, like asking for product availability, business proposal, budget queries, order requests among others.\nAttention (Orange): For emails that may require human intervention or not, the middle ground between processing and urgent labels.\n\nTools:\n- \n\nLabel Matching:\n\nAnalyze the email's subject, sender, recipient, keywords, and content.\nCompare with the aforementioned labels.\nAssign the email to the most appropriate existing label.\nMIGHT NEED CUSTOM TOOLS FOR JSON GENERATION\n"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the first item\nlet item = items[0].json.output;\n\n// If \"output\" is a stringified JSON, parse it\nif (typeof item === 'string') {\n  try {\n    item = JSON.parse(item);\n  } catch (error) {\n    throw new Error('Failed to parse JSON from string: ' + error.message);\n  }\n}\n\n// Only clean if detailed_description exists\nif (item.detailed_description) {\n  item.detailed_description = item.detailed_description\n    .replace(/\\*\\*/g, '')           // remove bold markers **\n    .replace(/\\*/g, '')             // remove bullet markers *\n    .replace(/#+\\s?/g, '')          // remove any markdown headers #\n    .replace(/\\n{2,}/g, '\\n')       // normalize multiple newlines\n    .replace(/\\n\\s+/g, '\\n')        // trim spaces after newlines\n    .trim();                        // remove leading/trailing spaces\n}\n\n// Return cleaned object\nreturn [{ json: item }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "a741511c-5d9e-4616-9081-1203c2d9004b",
+      "name": "json_cleanser"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        96,
+        224
+      ],
+      "id": "c725e3cf-d638-4136-a541-d8bdd7a5bfe6",
+      "name": "2.0-flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the first (and only) item from the input\nlet item = items[0].json;\n\n// Add new fields\nitem.conversation_id = $input.first().json.conversation_id; //TODO: REPLACE WITH ACTUAL CONVO ID\nitem.original_text = $input.first().json.original_text;\n\n// Return updated JSON\nreturn [{ json: item }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "9e24c8be-9a16-4552-81c6-0bea794aed56",
+      "name": "id_text_aggregator"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0",
+          "mode": "list",
+          "cachedResultName": "inventory_dataset",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 788443557,
+          "mode": "list",
+          "cachedResultName": "inventory_data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit#gid=788443557"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "inv_id",
+              "lookupValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', `product_id`, 'string') }}"
+            }
+          ]
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        432,
+        368
+      ],
+      "id": "e6a55cad-62ee-4cef-961c-4cc81a9075ad",
+      "name": "check_inventory",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1LcGvkGQjYx0z2dpjiRIyZQuB-kUYtQXvpofYZpC1cIk/edit?usp=drivesdk",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1LcGvkGQjYx0z2dpjiRIyZQuB-kUYtQXvpofYZpC1cIk/edit#gid=483886516",
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        576,
+        368
+      ],
+      "id": "af78f8f7-ace1-426d-a948-e3f389c50012",
+      "name": "extract_suppliers",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        144,
+        0
+      ],
+      "id": "3844a3f6-b4bf-4de1-bcf2-896c5947d47d",
+      "name": "manager_respond",
+      "retryOnFail": true,
+      "executeOnce": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "=[\n  {\n    \"id\": \"567b1aea-5f01-46fd-bb7d-4843c955798f\",\n    \"name\": \"message\",\n    \"value\": {{ $json.body.text }},\n    \"type\": \"string\"\n  },\n  {\n    \"id\": \"7322972d-76b6-409c-9f57-868f318827da\",\n    \"name\": \"threadId\",\n    \"value\": \"={{ $json.body.conversation_id }}\",\n    \"type\": \"string\"\n  }\n]\n",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.body.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -64,
+        0
+      ],
+      "id": "2493dda3-d388-456e-857f-cb8d34694c22",
+      "name": "format_manager_message",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 200,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        0
+      ],
+      "id": "3a7b15ef-8204-4ee4-bde6-da650dcb7fd8",
+      "name": "save_summarie",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.detailed_description, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $json.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        0
+      ],
+      "id": "7796eb45-25da-495b-9883-d9e1f19d2d99",
+      "name": "set_assitant_message",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to get the product_id list that matches the query",
+        "method": "POST",
+        "url": "https://ab8b5c386c36.ngrok-free.app/webhook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        368
+      ],
+      "id": "06781ec8-7a06-40b2-8e0e-8e13284e4ec6",
+      "name": "get_products_ids"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "98fa6375-4de0-4f3d-a2da-968eda10055b",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -352,
+        16
+      ],
+      "id": "468366fc-3839-44a7-aadf-75e4ff101051",
+      "name": "Webhook",
+      "webhookId": "98fa6375-4de0-4f3d-a2da-968eda10055b",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "content": "## In a perfecrt world\nThe Webhook would partition by connecting to \"format_manager_message\" and the AI agent in parallel instead of sequence"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -208,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "fcadeb40-456e-4081-83e9-af462258705e",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to generate an invoice",
+        "method": "POST",
+        "url": "https://hackathon25k.app.n8n.cloud/webhook/generate-invoice",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversation",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        368
+      ],
+      "id": "f5a50117-a870-44a4-a7c3-68d1cf342fdc",
+      "name": "generate_invoice_webhook"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.conversation_id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        224,
+        256
+      ],
+      "id": "f23b4ebe-b5c2-40f2-8871-d79e33f16e6b",
+      "name": "Simple Memory"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        []
+      ]
+    },
+    "AI negotiator": {
+      "main": [
+        [
+          {
+            "node": "json_cleanser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.0-flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "json_cleanser": {
+      "main": [
+        [
+          {
+            "node": "id_text_aggregator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_inventory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_suppliers": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "id_text_aggregator": {
+      "main": [
+        [
+          {
+            "node": "set_assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format_manager_message": {
+      "main": [
+        [
+          {
+            "node": "manager_respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manager_respond": {
+      "main": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_assitant_message": {
+      "main": [
+        [
+          {
+            "node": "save_summarie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_products_ids": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "generate_invoice_webhook": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI negotiator",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "20eca6b3-a6e2-41d3-9062-642e7664eb86",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "LHEQl6TYswCHHVfb",
+  "tags": []
+}

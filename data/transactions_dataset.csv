@@ -1,0 +1,6 @@
+transaction_id,customer_name,contact_name,contact_email,contact_phone,status_transaction,status_inventory,address,total_value_eur,notes,preferred_supplier,last_order_date,avg_lead_time_days,reorder_flag,category_focus
+trx-003,MechaTech GmbH,Lukas Braun,l.braun@mechatech.de,49 152 33445566,Completed,In Stock,"Am Silberturm 1, 47051 Duisburg, Germany","11,25",Standard steel orders,SUP-003,2025-09-15,7,No,Raw Materials
+trx-004,FastenIt AG,Claudia Meier,c.meier@fastenit.de,49 173 44556677,Pending,Low Stock,"Drillberg 1, 97980 Bad Mergentheim, Germany","9,5",High-volume fasteners,SUP-004,2025-10-05,2,Yes,Fasteners
+trx-005,ElectroPower Solutions,Stefan Koch,s.koch@electropower.de,49 89 55667788,In Progress,Low Stock,"Münchner Straße 89, 85774 Unterföhring, Germany","7,5",Motor and hydraulic components,SUP-005,2025-08-15,10,Yes,Electrical Components
+trx-006,Industrie Stahlbau,Markus Vogel,m.vogel@stahlbau.de,49 211 77889900,Completed,In Stock,"Industriestraße 45, 40221 Düsseldorf, Germany","13,8",Frames and rods,SUP-001,2025-10-01,5,No,Steel Products
+trx-007,Precision Parts GmbH,Karin Hoffmann,k.hoffmann@precisionparts.de,49 89 66778899,Delayed,Low Stock,"Gewerbering 12, 85235 Odelzhausen, Germany","6,75",Brackets and gears,SUP-002,2025-10-08,1,Yes,Components / Fasteners

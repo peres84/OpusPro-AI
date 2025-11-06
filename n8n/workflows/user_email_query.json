@@ -1,0 +1,893 @@
+{
+  "name": "user_email_query",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=The user has request: {{ $('Gmail Trigger').item.json.text || 'No request text available' }}\nhe attached some documents and the information is: {{ $json.output || 'No document analysis available' }}",
+        "options": {
+          "systemMessage": "=You are an intelligent email assistant. Your job is to read incoming emails, understand their content, and classify them according to urgency and whether human intervention is needed. You have **two tools available**:\n\n- `get_products_ids(query)`: Returns a list of the most relevant product IDs from the inventory based on the user query using vector embeddings.\n- `check_inventory(product_id)`: Checks the availability of a specific product in the inventory by its inventory ID.\n\nTasks:\n\n1. Read the full email content, including subject and body.\n2. Identify if the user is asking about a specific product.\n   - If a product is mentioned, first use the `get_products_ids(query)` tool to retrieve relevant product IDs.\n   - Then use `check_inventory` with the retrieved product IDs to determine availability.\n3. Decide the email label based on inventory:\n   - If any retrieved product has stock_quantity > 0, label the email as `\"auto_process\"`.\n   - If no products are found or all have stock_quantity <= 0, label it as `\"needs_human\"`.\n4. If no specific product is mentioned, classify based on content:\n   - `\"auto_process\"`: Can be handled entirely by the agent.\n   - `\"needs_human\"`: Requires human intervention.\n   - `\"follow_up\"`: Needs follow-up action but is not urgent.\n5. Summarize the email in 1-2 sentences (optional for `auto_process` emails to include in automated reply).\n6. Always return the output in **JSON format** with the following structure:\n\n{\n\"label\": \"<one of the labels above>\",\n\"summary\": \"<optional summary text>\",\n\"product_found\": \"<name of the product if found, otherwise null>\",\n\"product_ids\": [\"<list of relevant product IDs if any>\"]\n}\n\nConstraints:\n\n- Do NOT include explanations or extra text outside the JSON.\n- Focus on clarity and correctness of classification.\n- For emails labeled `\"auto_process\"`, you may generate suggested actions or responses that the agent can send automatically, including checking product availability with `check_inventory` using the product IDs retrieved from `get_products_ids(query)`."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        320,
+        256
+      ],
+      "id": "770af023-af95-41d5-9e33-4165010314b6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        48,
+        592
+      ],
+      "id": "3ff7a052-aecc-47b3-b843-a3f0b848cd50",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {
+          "dataPropertyAttachmentsPrefixName": "attachment_",
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1312,
+        304
+      ],
+      "id": "a70666ec-e751-49e4-904e-e2f8cb0a5961",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0",
+          "mode": "list",
+          "cachedResultName": "inventory_dataset",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 788443557,
+          "mode": "list",
+          "cachedResultName": "inventory_data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit#gid=788443557"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "inv_id",
+              "lookupValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', `product_id`, 'string') }}"
+            }
+          ]
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        560,
+        576
+      ],
+      "id": "659e0bc9-ba5e-45c0-9534-40659e96d31c",
+      "name": "check_inventory",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to get the product_id list that matches the query",
+        "method": "POST",
+        "url": "https://ab8b5c386c36.ngrok-free.app/webhook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        384,
+        576
+      ],
+      "id": "37ad1163-0041-45a4-9a74-2b04e3bf0fb8",
+      "name": "get_products_ids"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.va.landing.ai/v1/tools/agentic-document-analysis",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer bDEyNnUyOGIxdjlkZGF3NGtsMmloOmhNdUtRd09sbkN0dk5TS3lnRFQxbksyM2dvcEZIMjVB"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "include_marginalia",
+              "value": "true"
+            },
+            {
+              "name": "include_metadata_in_markdown",
+              "value": "true"
+            },
+            {
+              "name": "enable_rotation_detection",
+              "value": "false"
+            },
+            {
+              "name": "fields_schema",
+              "value": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"field1\": {\"type\": \"string\"},\n    \"field2\": {\"type\": \"string\"}\n  },\n  \"required\": [\"field1\", \"field2\"]\n}\n"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "pdf",
+              "inputDataFieldName": "attachment_0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -208,
+        -208
+      ],
+      "id": "6172b623-e775-46fb-8017-e60109720a03",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.data }}",
+        "options": {
+          "systemMessage": "You are an intelligent document analyzer that extracts and summarizes key information from parsed PDF documents.\n\nYour task is to analyze the provided JSON data from a parsed PDF and create a clear, structured summary.\n\n## Input Format\nYou will receive JSON data containing:\n- `markdown`: Full text content with structural elements\n- `extracted_schema`: Key fields extracted based on defined schema\n- `chunks`: Individual text segments with their locations\n- `metadata`: Document processing information\n\n## Output Requirements\nProvide a well-structured summary that includes:\n\n1. **Document Type**: Identify what kind of document this is (e.g., invoice, purchase order, inquiry, contract)\n\n2. **Key Information**: Extract and present the most important details such as:\n   - Reference numbers, dates, amounts\n   - Sender and recipient information\n   - Main purpose or subject\n\n3. **Critical Details**: Highlight time-sensitive or action-required information:\n   - Deadlines, delivery dates\n   - Required actions or responses\n   - Contact information\n\n4. **Items/Products** (if applicable): Summarize any products, services, or line items with:\n   - Quantities\n   - Specifications\n   - Total counts or amounts\n\n5. **Special Requirements**: Note any certifications, standards, or specific conditions mentioned\n\n## Formatting Guidelines\n- Use clear headers and bullet points for readability\n- Highlight urgent dates or requirements with ⏰ emoji\n- Keep the summary concise but comprehensive\n- Use tables only when presenting multiple similar items\n- Bold important values like amounts, dates, and reference numbers\n\n## Tone\n- Professional and objective\n- Clear and actionable\n- Focused on what matters most to the recipient\n\nNow, analyze the provided parsed PDF data and create a summary following these guidelines."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        32,
+        -208
+      ],
+      "id": "8b1efd7c-a499-4ec2-895c-7702ff854222",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        32,
+        0
+      ],
+      "id": "b8732016-a86d-4d9e-8ab9-3093a64a1c25",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "03815ffc-4a4f-47fa-a847-6a664167565d",
+              "leftValue": "={{ Object.keys($binary).includes('attachment_0') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        304
+      ],
+      "id": "86bcff3f-73fa-4940-8a53-31193c0802bb",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        256
+      ],
+      "id": "ff206638-8cf0-49d3-91bc-e574c245cb70",
+      "name": "Redis",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.threadId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        592
+      ],
+      "id": "8559ff1c-9fa3-4686-bcb4-7ae5bd5a31ab",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "= {{ JSON.stringify({\n    role: 'user',\n    content: $json.text,\n    timestamp: $now.toISO()\n  }) }}",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1024,
+        304
+      ],
+      "id": "7aac767b-58cc-4105-9c9f-ec3644482f2e",
+      "name": "Format USER Message"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' + $json.threadId }}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -768,
+        304
+      ],
+      "id": "692f2362-1a89-49a4-a652-b445105aa0db",
+      "name": "save_user_message",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.summary, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $('Gmail Trigger').item.json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1328,
+        256
+      ],
+      "id": "34d23e36-e0b6-44f4-a2cb-091072ce13f2",
+      "name": "set_Assitant_message"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the response data\nconst response = $input.all();\n\n// Extract the output string from the first item\nconst outputString = response[0].json.output;\n\n// Remove the markdown code block markers (```json and ```)\nconst jsonString = outputString.replace(/```json\\n/g, '').replace(/\\n```/g, '');\n\n// Parse the JSON string\nconst parsedData = JSON.parse(jsonString);\n\n// Return the parsed data\nreturn [{ json: parsedData }];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        272
+      ],
+      "id": "2badc0e2-c4e2-431d-83a5-223d954c90eb",
+      "name": "to_json_format"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "713e87a2-4b29-44fd-a529-4ee051f7d558",
+              "leftValue": "={{ $json.label }}",
+              "rightValue": "needs_human",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1056,
+        272
+      ],
+      "id": "7c27ccab-dc0b-4f25-b4d8-348aa9ff21cf",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        832
+      ],
+      "id": "f94db710-dbee-435e-9e42-151b2fc59ff2",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ZjEVOiQjGdb70QFT",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1904,
+        704
+      ],
+      "id": "2bc8497a-aebc-42f8-854c-43ebb06849d5",
+      "name": "Reply to a message",
+      "webhookId": "2c3124a4-bf39-4fb0-ac8e-bf4d30cb603a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WPWphTD79NkI7zIC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Gmail Trigger').item.json.threadId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1280,
+        848
+      ],
+      "id": "2be8d7de-4d83-4298-ac32-e26f57df2a95",
+      "name": "Simple Memory1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('to_json_format').item.json.summary }}",
+        "options": {
+          "systemMessage": "=You are an AI email assistant for **[Opus](https://opus-tech.ai/)** — AI for Dynamic Manufacturing Operations.  \nYour goal is to reply professionally, clearly, and helpfully to client or partner emails — and handle purchase confirmations automatically.\n\n### Company context:\n- Company name: Opus  \n- Headquarters: Berlin, Germany  \n- Email: info@opus-tech.ai  \n- Mission: Build agentic AI systems that automate manufacturing operations end-to-end — from sales to procurement, inventory, logistics, and finance.  \n- Focus areas: Intelligent document processing, supplier negotiations, order management, and ERP data automation.  \n- Core product: AI-powered \"agentic workers\" that streamline the entire order lifecycle for industrial companies.   \n\n### Your tools:\n- **pdf_generator**: You can call this function to generate a PDF invoice once the customer agrees to purchase.  \n  When the client confirms they want to buy, create the following payload:\n\n  ```json\n  payload = {\n    \"conversation\": \"<short natural language description of the order you can include as much information as possible to generate the invoice>\"\n  }\n\n## Extra information that you can use \n\n\"data\": {\n      \"receiver_name\": \"<customer name>\",\n      \"receiver_address1\": \"<address line 1>\",\n      \"receiver_address2\": \"<address line 2>\",\n      \"invoice_no\": \"<unique invoice number>\",\n      \"date\": \"<current date>\",\n      \"items\": [\n        {\n          \"item_name\": \"<product name>\",\n          \"unit_price\": <price>,\n          \"unit\": <quantity>,\n          \"total\": <subtotal>\n        }\n      ],\n      \"terms\": \"Payment due within 30 days\",\n      \"conditions\": \"Standard terms and conditions apply\"\n    }\n\n  After generating the PDF, send the invoice download link in the reply email.\nExample:\n“Your invoice is ready. You can download it here: {{pdf_link}}”\n\nBehavior Rules:\n\nRespond in the same language as the customer (English, German, or Spanish).\n\nIf the email expresses interest or questions, provide helpful answers.\n\nIf the email expresses agreement to buy, confirm the purchase and trigger pdf_generator.\n\nAlways maintain a polite, professional tone.\n\nEnd each message with:\n“Best regards,\nThe OpusPro Team.”\n\nExample of detected purchase intent:\n\nCustomer email:\n“I’d like to order 2 laptops at $800 each, and 3 mice at $20 each. Ship to John Smith, 123 Main St, New York, NY 10001.”\n\nAction:\n\nConfirm the purchase.\n\nCreate and send payload for pdf_generator.\n\nReply with:\n\nThank you for your order, John!\nYour invoice has been generated. You can download it here: [link].\nWe’ll process your shipment to 123 Main St, New York, NY 10001.\nBest regards,\nThe OpusPro Team.\n\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        624
+      ],
+      "id": "74ed8abd-bea7-4510-be9c-c275def2f4a4",
+      "name": "reply_agent"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to generate a PDF invoice ",
+        "method": "POST",
+        "url": "https://hackathon25k.app.n8n.cloud/webhook/generate-invoice",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversation",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1456,
+        848
+      ],
+      "id": "c90224d2-c113-406f-abe9-2b22008d97db",
+      "name": "pdf_generator"
+    },
+    {
+      "parameters": {
+        "url": "https://hackathon25k.app.n8n.cloud/webhook/030cadf5-25de-4ae5-aaf8-12843a021463",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "ticket_id",
+              "value": "={{ $('Gmail Trigger').item.json.threadId }}"
+            },
+            {
+              "name": "status",
+              "value": "new"
+            },
+            {
+              "name": "time",
+              "value": "={{$now.toISO()}}"
+            },
+            {
+              "name": "alert",
+              "value": "={{ $('to_json_format').item.json.label }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1792,
+        256
+      ],
+      "id": "ee467973-4d7d-4aa0-99be-3c791e6d236c",
+      "name": "set_ticket"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1984,
+        480
+      ],
+      "id": "99701207-71fb-40e8-aecc-facde644cdb7",
+      "name": "Redis1",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.output, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $('Gmail Trigger').item.json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1728,
+        480
+      ],
+      "id": "775d93b8-f4e8-4978-9950-170c4c650769",
+      "name": "set_Assitant_message1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "to_json_format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format USER Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_inventory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_products_ids": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format USER Message": {
+      "main": [
+        [
+          {
+            "node": "save_user_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_Assitant_message": {
+      "main": [
+        [
+          {
+            "node": "Redis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_user_message": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis": {
+      "main": [
+        [
+          {
+            "node": "set_ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "to_json_format": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "set_Assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "reply_agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "reply_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "reply_agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "reply_agent": {
+      "main": [
+        [
+          {
+            "node": "Reply to a message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "set_Assitant_message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "pdf_generator": {
+      "ai_tool": [
+        [
+          {
+            "node": "reply_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_Assitant_message1": {
+      "main": [
+        [
+          {
+            "node": "Redis1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fdafd862-fdfa-431c-a5b6-45217da93e95",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "eIT9BoXQwi8W5EBJ",
+  "tags": []
+}

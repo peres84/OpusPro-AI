@@ -1,0 +1,535 @@
+{
+  "name": "tickets_manager",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "=tickets",
+        "messageData": "={{$json.body.toJsonString()}}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        64,
+        592
+      ],
+      "id": "73dda2fe-2005-41a9-aae1-6a30de2e0b74",
+      "name": "save_ticket",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "030cadf5-25de-4ae5-aaf8-12843a021463",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -608,
+        496
+      ],
+      "id": "3a0c8818-083a-4a70-b483-bbc7740c2ef9",
+      "name": "update_tickets",
+      "webhookId": "030cadf5-25de-4ae5-aaf8-12843a021463"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8e677062-cb9f-43e1-9017-18c35ad917dc",
+              "leftValue": "={{ $json.body.status }}",
+              "rightValue": "=delete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -272,
+        496
+      ],
+      "id": "816c795d-b2ee-44bd-b669-2646eff4aca7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "path": "41fb634a-1e20-496e-8664-6105b05ae638",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -304,
+        896
+      ],
+      "id": "4635ae32-b4a3-4fbc-a8fb-703fee9d8598",
+      "name": "get_tickets_list",
+      "webhookId": "41fb634a-1e20-496e-8664-6105b05ae638"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "ticket_list",
+        "key": "tickets",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        16,
+        896
+      ],
+      "id": "c36ac60b-b996-4f9b-a8e0-7ceb2624f2f5",
+      "name": "Redis",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "ticket_list",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        288,
+        896
+      ],
+      "id": "d98358fe-a9db-4a2b-abfe-d519c2601d56",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all input items (usually only one if the list is inside json.ticket_list)\nconst items = $input.all();\n\n// Create an array to collect all parsed results\nlet allTickets = [];\n\n// Loop over all input items\nfor (const item of items) {\n  let data = item.json.ticket_list;\n\n  // If ticket_list is a string, parse it\n  if (typeof data === 'string') {\n    try {\n      data = JSON.parse(data);\n    } catch (e) {\n      throw new Error('Invalid ticket_list JSON: ' + e.message);\n    }\n  }\n\n  // If data is an array, append all of them\n  if (Array.isArray(data)) {\n    for (const entry of data) {\n      const parsed =\n        typeof entry.ticket_list === 'string'\n          ? JSON.parse(entry.ticket_list)\n          : entry;\n      allTickets.push({ json: parsed });\n    }\n  } else {\n    // If it's a single object\n    const parsed =\n      typeof data.ticket_list === 'string'\n        ? JSON.parse(data.ticket_list)\n        : data;\n    allTickets.push({ json: parsed });\n  }\n}\n\nreturn allTickets;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        896
+      ],
+      "id": "8477acaf-e6d8-49b0-86d2-d97993409caa",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all parsed items from previous node\nconst items = $input.all().map(i => i.json);\n\n// Filter only items with status === \"new\"\nconst newTickets = items.filter(i => i.status === \"new\");\n\n// Sort each by time or time_now descending (latest first)\nnewTickets.sort((a, b) => {\n  const timeA = new Date(a.time || a.time_now || 0);\n  const timeB = new Date(b.time || b.time_now || 0);\n  return timeB - timeA;\n});\n\n// Group by ticket_id (or thread id) and pick only the latest \"new\" per thread\nconst latestByTicket = {};\nfor (const t of newTickets) {\n  if (!latestByTicket[t.ticket_id]) {\n    latestByTicket[t.ticket_id] = t;\n  }\n}\n\n// Return as n8n items\nreturn Object.values(latestByTicket).map(t => ({ json: t }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        896
+      ],
+      "id": "d730374c-cb60-4c32-abb3-a494e4495fa5",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        896
+      ],
+      "id": "df7bfa84-14eb-4290-b382-723d6369f0c9",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "ticket_list",
+        "key": "tickets",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        64,
+        368
+      ],
+      "id": "033964c2-853e-4e2b-9ffa-f5b7f395cab0",
+      "name": "get_list",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "ticket_list",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        304,
+        368
+      ],
+      "id": "104f4ddd-77b4-48e1-8717-3a608181a347",
+      "name": "Split_list"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst threadIdToRemove = $('update_tickets').first().json.body.ticket_id || 'none';\n\nlet allTickets = [];\n\nfor (const item of items) {\n  let data = item.json.ticket_list;\n\n  // If string, parse as JSON array (or multiple JSON objects)\n  if (typeof data === 'string') {\n    try {\n      // Try parsing as array first\n      data = JSON.parse(data);\n    } catch (e) {\n      // If fails, maybe multiple objects separated by newlines\n      const lines = data.split(\"\\n\").filter(l => l.trim() !== \"\");\n      data = lines.map(line => JSON.parse(line));\n    }\n  }\n\n  // Ensure data is array\n  if (!Array.isArray(data)) data = [data];\n\n  for (const parsed of data) {\n    if (parsed.ticket_id !== threadIdToRemove) {\n      allTickets.push(parsed);\n    }\n  }\n}\n\n// ✅ Return a single JSON object with array\nreturn [{ json: { allTickets } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        368
+      ],
+      "id": "1911891e-19a8-4817-af90-2a8edcaef1d1",
+      "name": "to_json_list"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "tickets"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        912,
+        576
+      ],
+      "id": "21bc445a-109d-4196-8fb4-0fb11685511a",
+      "name": "delete_tickets",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        256
+      ],
+      "id": "64ed3d8f-59da-49f1-923b-7c4c1a3eb961",
+      "name": "Wait",
+      "webhookId": "6bc27ea0-e6ba-451c-b13a-dafb4b3dfe04"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "tickets",
+        "messageData": "={{ JSON.stringify($json.allTickets) }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        400
+      ],
+      "id": "8e88d8ed-daba-44ea-b172-0b0d5ab56d6a",
+      "name": "update_tickets1",
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "updated",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        304,
+        592
+      ],
+      "id": "6335caa1-0a36-4444-b2d9-919567cbc160",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ticket updated",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1536,
+        400
+      ],
+      "id": "f62e22a0-7d8e-40cc-ab4e-6b7f9ad432b3",
+      "name": "Respond to Webhook2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "save_ticket": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_tickets": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "get_list",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "save_ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_tickets_list": {
+      "main": [
+        [
+          {
+            "node": "Redis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_list": {
+      "main": [
+        [
+          {
+            "node": "Split_list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split_list": {
+      "main": [
+        [
+          {
+            "node": "to_json_list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "to_json_list": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "delete_tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_tickets": {
+      "main": [
+        [
+          {
+            "node": "update_tickets1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "update_tickets1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_tickets1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3edad77c-9ece-4e45-ba62-6439d533b9d8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "pV8g83ZJSRZmbcFz",
+  "tags": []
+}

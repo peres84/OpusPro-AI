@@ -1,0 +1,493 @@
+{
+  "name": "insight_finder",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        16,
+        192
+      ],
+      "id": "d990ae17-2abe-4fe3-8c55-1810c9b0d2c0",
+      "name": "2.0-flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CBrySXWtnmbX1v0u",
+          "name": "Google Gemini - Javier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.conversation_id }}",
+        "contextWindowLength": "=15"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        144,
+        192
+      ],
+      "id": "13f2792c-4097-4e49-b187-839122d72702",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"title\": \"\",\n   \"text_by_user\": \"\",\n   \"conversation_id\": \"\",\n  \"summary_insights\": \"\",\n\"key_findings\": [\n  {\n    \"inventory\": {\n      \"total_items_analyzed\": 20,\n      \"average_unit_price_eur\": 24.6,\n      \"most_common_category\": \"Components\",\n      \"frequent_bottlenecks\": [\n        \"Hydraulic hose 2SN DN6 (lead time 5 days, high demand)\",\n        \"Electric motor 0.75kW 3-Phase (below minimum stock)\"\n      ],\n      \"high_value_items\": [\n        \"Stainless Steel Sheet 304 (€185/unit)\",\n        \"Aluminum Plate 6082 (€125/unit)\"\n      ],\n      \"observations\": [\n        \"Most items restocked within 5–10 days.\",\n        \"Consumables and fasteners show the highest turnover rates.\"\n      ]\n    }\n  },\n  {\n    \"suppliers\": {\n      \"total_suppliers_analyzed\": 5,\n      \"best_performance\": \"Würth Industrie Service GmbH (99% on-time delivery, 0.1% rejection)\",\n      \"most_reliable\": \"Peres Industrial Solutions (97% on-time, high responsiveness)\",\n      \"high_risk_vendors\": [\n        \"TechnoComponents Bayern GmbH (89% on-time, long lead times)\",\n        \"Klöckner & Co SE (slow response times)\"\n      ],\n      \"price_trends\": {\n        \"most_competitive\": \"Peres Industrial Solutions\",\n        \"premium_pricing\": \"Würth Industrie Service GmbH\"\n      },\n      \"observations\": [\n        \"Volume discounts available for >€3,000 with Peres Industrial Solutions.\",\n        \"Würth is the fastest but most expensive supplier.\"\n      ]\n    }\n  },\n  {\n    \"transactions\": {\n      \"total_transactions_analyzed\": 7,\n      \"reorder_rate_percent\": 43,\n      \"most_common_category\": \"Fasteners\",\n      \"most_referred_supplier\": \"SUP-004 (Würth Industrie Service GmbH)\",\n      \"delayed_transactions\": 1,\n      \"status_distribution\": {\n        \"completed\": 2,\n        \"in_progress\": 1,\n        \"pending\": 1,\n        \"delayed\": 1\n      },\n      \"observations\": [\n        \"Reorders are concentrated in fasteners and electrical components.\",\n        \"Transactions involving low stock items often show delays.\"\n      ]\n    }\n  }\n],\n\"general_recommendations\": \"\"\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        240
+      ],
+      "id": "c287d00b-97c8-45e2-8716-036fd440fd1c",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Make the insights based on the details below: text_by_user:  {{ $('Webhook').item.json.body.text }}, conversation_id: {{ $('Webhook').item.json.body.conversation_id }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Objective:\nYou are the company's Intelligencen and insghter Agent. Your goal is to analyze and aggregate unstructured procurement data from emails, supplier quotes, past negotiations and deal records. Extract and summarize hidden insights such as frequently delayed suppliers, best-performing vendors, recurring material bottlenecks and cost optimization opportunities utilizing the available tools. The goal is to provide concise, actionable intelligence for decision-making and supplier relationship management.\n\nRules:\n- Keep all responses in plain text (no markdown, no markup)\n- No swearing, offensive, or inappropriate language\n- Be factual, concise, and analytical\n- Do not invent unrealistic data; if data is missing, infer trends logically and clearly note assumptions\n\nTools:\n- Structure output parser\n- `extract_inventory`: Extracts the available inventory in the database \n- `extract_suppliers`: Extracts the available suppliers in the database \n- `extract_transactions`: Extracts the available transactions in the database \n\nTasks and steps:\n1. Read and analyze the text give by the user and lean more towards that without neglecting the other areas.\n2. Extract the transaction database using `extract_transactions` to analyze past transactions and trends among clients. Focus especially on reorder_flag, category_focus, referred_supplier and status_transaction for derived metrics like reorder rate, which category is the most common, which supplier is the most referred etc.\n3. Extract the supplier database using `extract_ suppliers` to analyze trends among suppliers. Focus especially on quality_rejection, orders_complete, on_time_delivery, contact_languages, total_business_ytd_eur, price_competitiveness, reliability_score, volume_discount and negotiation_levers for dervied metrics.\n4. Extract the inventory database using `extract_inventory` to analyze trends withing the inventory of the company. Focus especially on last_restock, unit_price_eur, category and preferred_supplier for derived metrics.\n5. Detect recurring procurement issues (e.g., shortages, bottlenecks, quality issues), high-value or high-risk vendors, highlight patterns in pricing, cost fluctuations, and negotiation outcomes\n6. Suggest areas for process improvement or supplier diversification\n7. Always return the output in **JSON format** with the following structure:\n{\n  \"title\": \"\",\n   \"text_by_user\": \"\",\n   \"conversation_id\": \"\",\n  \"summary_insights\": \"\",\n\"key_findings\": [\n  {\n    \"inventory\": {\n      \"total_items_analyzed\": 20,\n      \"average_unit_price_eur\": 24.6,\n      \"most_common_category\": \"Components\",\n      \"frequent_bottlenecks\": [\n        \"Hydraulic hose 2SN DN6 (lead time 5 days, high demand)\",\n        \"Electric motor 0.75kW 3-Phase (below minimum stock)\"\n      ],\n      \"high_value_items\": [\n        \"Stainless Steel Sheet 304 (€185/unit)\",\n        \"Aluminum Plate 6082 (€125/unit)\"\n      ],\n      \"observations\": [\n        \"Most items restocked within 5–10 days.\",\n        \"Consumables and fasteners show the highest turnover rates.\"\n      ]\n    }\n  },\n  {\n    \"suppliers\": {\n      \"total_suppliers_analyzed\": 5,\n      \"best_performance\": \"Würth Industrie Service GmbH (99% on-time delivery, 0.1% rejection)\",\n      \"most_reliable\": \"Peres Industrial Solutions (97% on-time, high responsiveness)\",\n      \"high_risk_vendors\": [\n        \"TechnoComponents Bayern GmbH (89% on-time, long lead times)\",\n        \"Klöckner & Co SE (slow response times)\"\n      ],\n      \"price_trends\": {\n        \"most_competitive\": \"Peres Industrial Solutions\",\n        \"premium_pricing\": \"Würth Industrie Service GmbH\"\n      },\n      \"observations\": [\n        \"Volume discounts available for >€3,000 with Peres Industrial Solutions.\",\n        \"Würth is the fastest but most expensive supplier.\"\n      ]\n    }\n  },\n  {\n    \"transactions\": {\n      \"total_transactions_analyzed\": 7,\n      \"reorder_rate_percent\": 43,\n      \"most_common_category\": \"Fasteners\",\n      \"most_referred_supplier\": \"SUP-004 (Würth Industrie Service GmbH)\",\n      \"delayed_transactions\": 1,\n      \"status_distribution\": {\n        \"completed\": 2,\n        \"in_progress\": 1,\n        \"pending\": 1,\n        \"delayed\": 1\n      },\n      \"observations\": [\n        \"Reorders are concentrated in fasteners and electrical components.\",\n        \"Transactions involving low stock items often show delays.\"\n      ]\n    }\n  }\n],\n\"general_recommendations\": \"\"\n}\nFinal note:\nAnalyze all available text and metadata to identify supplier trends, performance indicators, and systemic risks. Summarize these findings and provide clear, actionable recommendations for management or procurement teams.\n",
+          "maxIterations": 6
+        }
+      },
+      "id": "408baa22-ebb4-45e1-bd47-27ff4acb5c1d",
+      "name": "AI insighter",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        192,
+        0
+      ],
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "typeVersion": 1.7,
+      "alwaysOutputData": true,
+      "maxTries": 4,
+      "waitBetweenTries": 300,
+      "notes": "Objective:\nAutomatically categorize incoming emails based on these custom labels: Urgent, Processing and Attention\n\nLabels explanation:\nUrgent (Red): For emails that requires human intervention as soon as possible because the email might be about a refund, complex questions/queries, direct contact with a representative of the company among others.\nProcessing (Green): For emails that an AI assistant can handle with minimal or no human intervention at all, like asking for product availability, business proposal, budget queries, order requests among others.\nAttention (Orange): For emails that may require human intervention or not, the middle ground between processing and urgent labels.\n\nTools:\n- \n\nLabel Matching:\n\nAnalyze the email's subject, sender, recipient, keywords, and content.\nCompare with the aforementioned labels.\nAssign the email to the most appropriate existing label.\nMIGHT NEED CUSTOM TOOLS FOR JSON GENERATION\n"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1LcGvkGQjYx0z2dpjiRIyZQuB-kUYtQXvpofYZpC1cIk/edit?usp=drivesdk",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1LcGvkGQjYx0z2dpjiRIyZQuB-kUYtQXvpofYZpC1cIk/edit#gid=483886516",
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        320,
+        400
+      ],
+      "id": "6e060fac-affb-4345-af4d-65c619c74418",
+      "name": "extract_suppliers",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1MUN_fwnp7Wt2nqIhjdGGFFE7q-3PUsK6d_TX_ZIThiU/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1MUN_fwnp7Wt2nqIhjdGGFFE7q-3PUsK6d_TX_ZIThiU/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        400
+      ],
+      "id": "40c15298-27e8-4831-bb23-dee9b214e31b",
+      "name": "extract_transactions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit?gid=788443557#gid=788443557",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1BImcsZhb-NdrbHUCqQPhgsXWZNW7OQ5mb-BwAYO5kb0/edit?gid=788443557#gid=788443557",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        160,
+        400
+      ],
+      "id": "f37f8a36-4722-42fd-88fc-29a78a77fceb",
+      "name": "extract_inventory",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "q4vmTwnNZDxKNiIp",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the first item\nlet item = items[0].json.output;\n\n// If \"output\" is a stringified JSON, parse it\nif (typeof item === 'string') {\n  try {\n    item = JSON.parse(item);\n  } catch (error) {\n    throw new Error('Failed to parse JSON from string: ' + error.message);\n  }\n}\n\n// Clean top-level text fields if they exist\nconst textFields = ['summary_insights', 'general_recommendations', 'title', 'text_by_user'];\ntextFields.forEach(field => {\n  if (item[field]) {\n    item[field] = item[field]\n      .replace(/\\*\\*/g, '')           // remove bold markers **\n      .replace(/\\*/g, '')             // remove bullet markers *\n      .replace(/#+\\s?/g, '')          // remove markdown headers #\n      .replace(/\\n{2,}/g, '\\n')       // normalize multiple newlines\n      .replace(/\\n\\s+/g, '\\n')        // trim spaces after newlines\n      .trim();                        // remove leading/trailing spaces\n  }\n});\n\n// Clean text arrays inside key_findings without altering values\nif (Array.isArray(item.key_findings)) {\n  item.key_findings.forEach(section => {\n    const sectionName = Object.keys(section)[0];\n    const sectionData = section[sectionName];\n    if (sectionData && typeof sectionData === 'object') {\n      Object.entries(sectionData).forEach(([key, value]) => {\n        // Only clean arrays of strings\n        if (Array.isArray(value)) {\n          sectionData[key] = value.map(v => \n            typeof v === 'string' \n              ? v.replace(/\\*\\*/g, '')\n                 .replace(/\\*/g, '')\n                 .replace(/#+\\s?/g, '')\n                 .replace(/\\n{2,}/g, '\\n')\n                 .replace(/\\n\\s+/g, '\\n')\n                 .trim()\n              : v\n          );\n        }\n      });\n    }\n  });\n}\n\n// Return cleaned object without altering any actual values\nreturn [{ json: item }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        0
+      ],
+      "id": "1f5d2ba8-56bf-4bae-bc6c-c4c591b8fef4",
+      "name": "json_cleanser"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        0
+      ],
+      "id": "5fe8476c-51fd-479b-84e7-37f355033053",
+      "name": "manager_respond",
+      "retryOnFail": true,
+      "executeOnce": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567b1aea-5f01-46fd-bb7d-4843c955798f",
+              "name": "message",
+              "value": "=[\n  {\n    \"id\": \"567b1aea-5f01-46fd-bb7d-4843c955798f\",\n    \"name\": \"message\",\n    \"value\": {{ $json.body.text }},\n    \"type\": \"string\"\n  },\n  {\n    \"id\": \"7322972d-76b6-409c-9f57-868f318827da\",\n    \"name\": \"threadId\",\n    \"value\": \"={{ $json.body.conversation_id }}\",\n    \"type\": \"string\"\n  }\n]\n",
+              "type": "string"
+            },
+            {
+              "id": "7322972d-76b6-409c-9f57-868f318827da",
+              "name": "threadId",
+              "value": "={{ $json.body.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "ec2e0683-b87a-421d-8cb9-e27c137b3ad6",
+      "name": "format_manager_message",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 200,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ 'conversation:' +  $json.threadId}}",
+        "messageData": "={{ $json.message }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "id": "8dd341fc-59cf-4c32-8e76-7f32ef4d44fa",
+      "name": "save_summarie",
+      "retryOnFail": true,
+      "waitBetweenTries": 200,
+      "credentials": {
+        "redis": {
+          "id": "lptKKa0mVEuIiFKX",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c04abc71-c126-4a44-8f35-cb40e6b5fe86",
+              "name": "message",
+              "value": "= {{ JSON.stringify({     role: 'ai_agent',     content: $json.detailed_description, timestamp: $now.toISO()   }) }}",
+              "type": "string"
+            },
+            {
+              "id": "32e31e6d-783f-43be-89ea-2a34bbf4c55c",
+              "name": "threadId",
+              "value": "={{ $json.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        0
+      ],
+      "id": "72fc19a6-94c5-4be3-b72a-ea4bb68d7054",
+      "name": "set_assitant_message",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET",
+          "POST",
+          "PATCH"
+        ],
+        "path": "a575bc34-50e3-4046-b670-be9aac98cfe5",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -480,
+        -16
+      ],
+      "id": "edbf329e-575a-48c0-89b5-8c50b5bc8375",
+      "name": "Webhook",
+      "webhookId": "a575bc34-50e3-4046-b670-be9aac98cfe5",
+      "retryOnFail": true,
+      "waitBetweenTries": 200
+    },
+    {
+      "parameters": {
+        "content": "## In a perfecrt world\nThe Webhook would partition by connecting to \"format_manager_message\" and the AI agent in parallel instead of sequence"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -336,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "23fd53ee-916d-4d11-8194-d1315b71d1d9",
+      "name": "Sticky Note1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2.0-flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_suppliers": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_transactions": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_inventory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "json_cleanser": {
+      "main": [
+        [
+          {
+            "node": "set_assitant_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI insighter": {
+      "main": [
+        [
+          {
+            "node": "json_cleanser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format_manager_message": {
+      "main": [
+        [
+          {
+            "node": "manager_respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manager_respond": {
+      "main": [
+        [
+          {
+            "node": "AI insighter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_assitant_message": {
+      "main": [
+        [
+          {
+            "node": "save_summarie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "format_manager_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "58399c35-bade-4dea-8272-ab9202121a8f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7689b2d292c0781d20ceefaa84bdcd9885638f03916f0bd47506d5dc7d5acfe2"
+  },
+  "id": "i9Aksse9ee6v30h0",
+  "tags": []
+}
