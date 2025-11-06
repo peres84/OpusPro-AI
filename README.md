@@ -6,6 +6,8 @@ OpusPro is an AI-powered dashboard for manufacturing companies to manage custome
 
 This project is designed to streamline manufacturing operations by providing a centralized platform for managing key business data. It leverages AI and workflow automation to reduce manual effort and improve efficiency. With OpusPro, you can easily track inventory, manage supplier information, and get insights into your business performance.
 
+This repository was created as an entry for the Big Berlin Hack (Tech Europe) hackathon in Berlin.
+
 A key feature of the project is its ability to process PDF documents, extracting valuable data and integrating it into your workflows. This is powered by a robust backend that communicates with n8n for workflow automation.
 
 ## Key Features
